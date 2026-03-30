@@ -1,21 +1,35 @@
-"""通知技能 - 飞书/钉钉"""
+"""
+通知技能 - 封装MCP调用
 
-import httpx
-from typing import Any, Dict, Optional
+实际HTTP请求由http-mcp处理，这里只保留业务逻辑
+"""
+
+from typing import Any, Dict, Optional, List
+from dataclasses import dataclass
+
+
+@dataclass
+class NotificationMessage:
+    """通知消息"""
+    channel: str
+    message: str
+    msg_type: str = "text"
 
 
 class NotificationSkill:
     """
     通知技能
 
-    支持多种通知渠道：
-    - 飞书 Webhook
-    - 钉钉 Webhook
-    - 邮件（可选）
+    封装MCP调用，发送飞书/钉钉通知
     """
 
     def __init__(self):
-        self.channels: Dict[str, Dict[str, Any]] = {}
+        self.channels: Dict[str, Dict[str, str]] = {}
+        self._mcp_tools: Optional[Any] = None
+
+    def set_mcp_tools(self, mcp_tools: Any) -> None:
+        """设置MCP工具集（由Agent在运行时注入）"""
+        self._mcp_tools = mcp_tools
 
     def add_channel(self, name: str, channel_type: str, webhook_url: str, **kwargs):
         """
@@ -23,9 +37,8 @@ class NotificationSkill:
 
         Args:
             name: 渠道名称
-            channel_type: 渠道类型 (feishu/dingtalk/email)
+            channel_type: 渠道类型 (feishu/dingtalk)
             webhook_url: Webhook地址
-            **kwargs: 其他配置
         """
         self.channels[name] = {
             "type": channel_type,
@@ -40,7 +53,7 @@ class NotificationSkill:
         msg_type: str = "text"
     ) -> Dict[str, Any]:
         """
-        发送消息
+        发送消息（通过MCP）
 
         Args:
             channel: 渠道名称
@@ -60,11 +73,29 @@ class NotificationSkill:
         channel_type = config["type"]
         webhook_url = config["webhook_url"]
 
+        if not self._mcp_tools:
+            return {
+                "success": False,
+                "error": "MCP tools not set, please call set_mcp_tools() first"
+            }
+
         try:
             if channel_type == "feishu":
-                return await self._send_feishu(webhook_url, message, msg_type)
+                return await self._send_via_mcp(
+                    webhook_url=webhook_url,
+                    payload={
+                        "msg_type": msg_type,
+                        "content": {"text": message}
+                    }
+                )
             elif channel_type == "dingtalk":
-                return await self._send_dingtalk(webhook_url, message, msg_type)
+                return await self._send_via_mcp(
+                    webhook_url=webhook_url,
+                    payload={
+                        "msgtype": msg_type,
+                        "text": {"content": message}
+                    }
+                )
             else:
                 return {
                     "success": False,
@@ -76,51 +107,24 @@ class NotificationSkill:
                 "error": str(e)
             }
 
-    async def _send_feishu(
-        self,
-        webhook_url: str,
-        message: str,
-        msg_type: str
-    ) -> Dict[str, Any]:
-        """发送飞书消息"""
-        payload = {
-            "msg_type": msg_type,
-            "content": {
-                "text": message
+    async def _send_via_mcp(self, webhook_url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """通过MCP发送HTTP请求"""
+        # 使用http-mcp发送请求
+        # http-mcp提供 http_request 工具
+        if hasattr(self._mcp_tools, 'http_request'):
+            result = await self._mcp_tools.http_request(
+                method="POST",
+                url=webhook_url,
+                body=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            return {"success": True, "result": result}
+        else:
+            # 降级：返回结构化错误
+            return {
+                "success": False,
+                "error": "http_request tool not available in MCP tools"
             }
-        }
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(webhook_url, json=payload)
-            result = response.json()
-
-            if result.get("code") == 0 or result.get("StatusCode") == 0:
-                return {"success": True, "result": result}
-            else:
-                return {"success": False, "error": result.get("msg", "Unknown error")}
-
-    async def _send_dingtalk(
-        self,
-        webhook_url: str,
-        message: str,
-        msg_type: str
-    ) -> Dict[str, Any]:
-        """发送钉钉消息"""
-        payload = {
-            "msgtype": msg_type,
-            "text": {
-                "content": message
-            }
-        }
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(webhook_url, json=payload)
-            result = response.json()
-
-            if result.get("errcode") == 0:
-                return {"success": True, "result": result}
-            else:
-                return {"success": False, "error": result.get("errmsg", "Unknown error")}
 
     async def send_report(
         self,
@@ -137,7 +141,6 @@ class NotificationSkill:
         Returns:
             发送结果
         """
-        # 格式化报告为消息
         message = self._format_report(report)
         return await self.send_message(channel, message, "text")
 
@@ -156,3 +159,7 @@ class NotificationSkill:
             lines.append(f"📌 详情: {report['message']}")
 
         return "\n".join(lines)
+
+    def list_channels(self) -> List[str]:
+        """列出所有配置的渠道"""
+        return list(self.channels.keys())

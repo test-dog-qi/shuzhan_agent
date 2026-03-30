@@ -1,7 +1,9 @@
-"""数栈平台认证模块"""
+"""
+数栈平台认证模块
 
-import asyncio
-import httpx
+保留认证业务逻辑，HTTP请求由MCP处理
+"""
+
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
@@ -11,16 +13,16 @@ class AuthResult:
     """认证结果"""
     success: bool
     message: str
+    token: Optional[str] = None
     cookies: Optional[Dict[str, str]] = None
-    headers: Optional[Dict[str, str]] = None
     user_info: Optional[Dict[str, Any]] = None
 
 
-class DataStackAuth:
+class DataStackAuthenticator:
     """
-    数栈平台认证
+    数栈平台认证器
 
-    支持账号密码登录和验证码处理
+    负责构建认证请求，HTTP请求由MCP处理
     """
 
     def __init__(
@@ -28,112 +30,120 @@ class DataStackAuth:
         base_url: str,
         username: str,
         password: str,
-        captcha_handler=None
     ):
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
-        self.captcha_handler = captcha_handler
-        self._session: Optional[httpx.AsyncClient] = None
-        self._is_logged_in = False
+        self._token: Optional[str] = None
+        self._mcp_tools: Optional[Any] = None
 
-    async def login(self) -> AuthResult:
+    def set_mcp_tools(self, mcp_tools: Any) -> None:
+        """设置MCP工具集"""
+        self._mcp_tools = mcp_tools
+
+    def build_login_request(self, captcha_id: Optional[str] = None, captcha_code: Optional[str] = None) -> Dict[str, Any]:
         """
-        执行登录
+        构建登录请求参数
+
+        Args:
+            captcha_id: 验证码ID
+            captcha_code: 验证码答案
 
         Returns:
-            AuthResult: 登录结果
+            登录请求体
         """
-        async with httpx.AsyncClient(
-            base_url=self.base_url,
-            follow_redirects=True,
-            timeout=30.0
-        ) as client:
-            # 1. 获取登录页面（如果有验证码，先获取验证码）
-            captcha_id, captcha_image = await self._get_captcha(client)
-            captcha_code = None
+        login_data = {
+            "username": self.username,
+            "password": self.password,
+        }
+        if captcha_id and captcha_code:
+            login_data["captchaId"] = captcha_id
+            login_data["captchaCode"] = captcha_code
 
-            if captcha_id and self.captcha_handler:
-                captcha_code = await self.captcha_handler.handle_login_captcha(
-                    client,
-                    f"{self.base_url}/api/rdos/common/captcha/image"
-                )
+        return login_data
 
-            # 2. 执行登录
-            login_data = {
-                "username": self.username,
-                "password": self.password,
-            }
-            if captcha_id:
-                login_data["captchaId"] = captcha_id
-                login_data["captchaCode"] = captcha_code
+    def build_captcha_request(self) -> Dict[str, Any]:
+        """构建验证码请求参数"""
+        return {
+            "url": f"{self.base_url}/api/rdos/common/captcha/image",
+            "method": "GET"
+        }
 
-            try:
-                response = await client.post(
-                    "/api/rdos/common/user/login",
-                    json=login_data
-                )
-                result = response.json()
+    def parse_login_response(self, response: Dict[str, Any]) -> AuthResult:
+        """
+        解析登录响应
 
-                if response.status_code == 200 and result.get("code") == 0:
-                    self._is_logged_in = True
-                    # 提取cookies
-                    cookies = {k: v for k, v in response.cookies.items()}
-                    headers = {"Authorization": f"Bearer {result.get('data', {}).get('token')}"}
+        Args:
+            response: HTTP响应
 
-                    return AuthResult(
-                        success=True,
-                        message="登录成功",
-                        cookies=cookies,
-                        headers=headers,
-                        user_info=result.get("data")
-                    )
-                else:
-                    return AuthResult(
-                        success=False,
-                        message=result.get("msg", "登录失败")
-                    )
+        Returns:
+            AuthResult
+        """
+        code = response.get("code", -1)
+        if code == 0:
+            data = response.get("data", {})
+            self._token = data.get("token")
+            return AuthResult(
+                success=True,
+                message="登录成功",
+                token=self._token,
+                user_info=data
+            )
+        else:
+            return AuthResult(
+                success=False,
+                message=response.get("msg", "登录失败")
+            )
 
-            except Exception as e:
-                return AuthResult(
-                    success=False,
-                    message=f"登录异常: {str(e)}"
-                )
+    def get_auth_headers(self) -> Dict[str, str]:
+        """获取认证请求头"""
+        if self._token:
+            return {"Authorization": f"Bearer {self._token}"}
+        return {}
 
-    async def _get_captcha(self, client: httpx.AsyncClient) -> tuple:
-        """获取验证码"""
-        try:
-            response = await client.get("/api/rdos/common/captcha/image")
-            if response.status_code == 200:
-                result = response.json()
-                captcha_id = result.get("data", {}).get("captchaId")
-                image_data = response.content
-                return captcha_id, image_data
-        except Exception:
-            pass
-        return None, None
+    @property
+    def is_authenticated(self) -> bool:
+        """是否已认证"""
+        return self._token is not None
 
-    async def get_session(self) -> httpx.AsyncClient:
-        """获取已认证的会话"""
-        if not self._is_logged_in:
-            result = await self.login()
-            if not result.success:
-                raise ValueError(f"登录失败: {result.message}")
 
-        headers = {}
-        if hasattr(self, '_auth_headers'):
-            headers = self._auth_headers
+class CaptchaHandler:
+    """
+    验证码处理器
 
-        return httpx.AsyncClient(
-            base_url=self.base_url,
-            headers=headers,
-            follow_redirects=True,
-            timeout=30.0
-        )
+    使用MCP的图像识别能力解决验证码
+    """
 
-    def is_logged_in(self) -> bool:
-        """检查是否已登录"""
-        return self._is_logged_in
+    def __init__(self, mcp_tools: Optional[Any] = None):
+        self._mcp_tools = mcp_tools
+
+    def set_mcp_tools(self, mcp_tools: Any) -> None:
+        """设置MCP工具集"""
+        self._mcp_tools = mcp_tools
+
+    async def solve_captcha(self, image_data: bytes) -> str:
+        """
+        使用MCP图像识别解决验证码
+
+        Args:
+            image_data: 验证码图片字节数据
+
+        Returns:
+            验证码答案
+        """
+        if not self._mcp_tools:
+            raise ValueError("MCP tools not set")
+
+        # 使用everart-mcp进行图像识别
+        # everart提供 image_to_text 工具
+        if hasattr(self._mcp_tools, 'image_to_text'):
+            result = await self._mcp_tools.image_to_text(
+                image=image_data,
+                prompt="请识别图片中的验证码文字或数字，只返回验证码内容"
+            )
+            return result.get("text", "").strip()
+        else:
+            raise ValueError("image_to_text tool not available in MCP tools")
 
 
 class AuthManager:
@@ -144,19 +154,20 @@ class AuthManager:
     """
 
     def __init__(self):
-        self._auths: Dict[str, DataStackAuth] = {}
+        self._authenticators: Dict[str, DataStackAuthenticator] = {}
 
-    def add_auth(self, env_name: str, auth: DataStackAuth) -> None:
+    def add_auth(self, env_name: str, authenticator: DataStackAuthenticator) -> None:
         """添加环境认证"""
-        self._auths[env_name] = auth
+        self._authenticators[env_name] = authenticator
 
-    def get_auth(self, env_name: str) -> Optional[DataStackAuth]:
+    def get_auth(self, env_name: str) -> Optional[DataStackAuthenticator]:
         """获取环境认证"""
-        return self._auths.get(env_name)
+        return self._authenticators.get(env_name)
 
-    async def login_all(self) -> Dict[str, AuthResult]:
-        """登录所有环境"""
-        results = {}
-        for name, auth in self._auths.items():
-            results[name] = await auth.login()
-        return results
+    def list_auths(self) -> List[str]:
+        """列出所有已配置的环境"""
+        return list(self._authenticators.keys())
+
+
+# 类型提示需要
+from typing import List, Dict

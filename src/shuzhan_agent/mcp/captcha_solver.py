@@ -1,9 +1,15 @@
-"""验证码处理模块"""
+"""
+验证码解决器 - MCP封装
 
-import asyncio
-import httpx
+使用MCP的图像识别能力解决验证码
+无需自己实现OCR逻辑
+"""
+
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..agent.base import Tool
 
 
 class CaptchaSolver(ABC):
@@ -23,105 +29,105 @@ class CaptchaSolver(ABC):
         pass
 
 
-class OCRCaptchaSolver(CaptchaSolver):
+class MCPCaptchaSolver(CaptchaSolver):
     """
-    基于OCR的验证码解决器
+    基于MCP的验证码解决器
 
-    适用于简单的数字/字母验证码
-    """
-
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key
-
-    async def solve(self, image_data: bytes) -> str:
-        """使用OCR识别验证码"""
-        # 这里可以集成各种OCR服务
-        # 1. MiniMax/其他AI API的图像识别
-        # 2. 第三方OCR服务（如阿里云、腾讯云）
-        # 3. 开源OCR（如Tesseract）
-
-        # 示例：使用占位符，实际需要接入真实OCR
-        # 推荐使用 MiniMax Vision API 或腾讯云 OCR
-
-        # 伪代码示例：
-        # from volcengine.visual.VisualClient import VisualClient
-        # client = VisualClient(api_key, secret_key)
-        # result = client.captcha_recognize(image_data)
-        # return result.text
-
-        raise NotImplementedError("需要配置真实的OCR服务")
-
-
-class AIMCaptchaSolver(CaptchaSolver):
-    """
-    基于AI模型的验证码解决器
-
-    使用视觉大模型识别验证码
+    使用everart-mcp等图像识别MCP
     """
 
-    def __init__(self, base_url: str, api_key: str):
-        self.base_url = base_url
-        self.api_key = api_key
-
-    async def solve(self, image_data: bytes) -> str:
-        """使用视觉AI模型识别验证码"""
-        # 使用MiniMax或其他视觉API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/v1/captcha/recognize",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                files={"image": image_data}
-            )
-            result = response.json()
-            return result.get("text", "")
-
-
-class CaptchaHandler:
-    """
-    验证码处理器
-
-    负责处理登录流程中的验证码
-    """
-
-    def __init__(self, solver: Optional[CaptchaSolver] = None):
-        self.solver = solver
-
-    async def handle_login_captcha(self, session: httpx.AsyncClient, captcha_url: str) -> str:
+    def __init__(self, mcp_tools: Optional["Tool"] = None):
         """
-        获取并解决登录验证码
+        Args:
+            mcp_tools: MCP工具集（需包含image_to_text工具）
+        """
+        self._mcp_tools = mcp_tools
+
+    def set_mcp_tools(self, mcp_tools: "Tool") -> None:
+        """设置MCP工具"""
+        self._mcp_tools = mcp_tools
+
+    async def solve(self, image_data: bytes) -> str:
+        """
+        使用MCP图像识别解决验证码
 
         Args:
-            session: HTTP客户端会话
-            captcha_url: 验证码获取URL
+            image_data: 验证码图片字节数据
 
         Returns:
             验证码答案
         """
-        # 1. 获取验证码图片
-        response = await session.get(captcha_url)
-        image_data = response.content
+        if not self._mcp_tools:
+            raise ValueError(
+                "MCP tools not set. Please configure everart-mcp or similar image recognition MCP. "
+                "Run: claude mcp add everart-mcp -- npx -y @modelcontextprotocol/server-everart"
+            )
 
-        # 2. 使用solver解决验证码
-        if self.solver:
-            return await self.solver.solve(image_data)
+        # 使用MCP的图像识别能力
+        # 尝试不同的MCP工具名称
+        result = None
 
-        raise ValueError("未配置验证码解决器")
+        if hasattr(self._mcp_tools, 'image_to_text'):
+            result = await self._mcp_tools.image_to_text(
+                image=image_data,
+                prompt="请识别图片中的验证码字符，只返回验证码文字"
+            )
+        elif hasattr(self._mcp_tools, 'ocr'):
+            result = await self._mcp_tools.ocr(image=image_data)
+        elif hasattr(self._mcp_tools, 'recognize_captcha'):
+            result = await self._mcp_tools.recognize_captcha(image=image_data)
+        else:
+            raise ValueError(
+                f"MCP tools do not have image recognition capability. "
+                f"Available tools: {dir(self._mcp_tools)}"
+            )
 
-    def set_solver(self, solver: CaptchaSolver) -> None:
-        """设置验证码解决器"""
-        self.solver = solver
+        # 解析结果
+        if isinstance(result, str):
+            return result.strip()
+        elif isinstance(result, dict):
+            return result.get("text", result.get("content", "")).strip()
+        else:
+            return str(result).strip()
+
+
+class CaptchaSolverFactory:
+    """
+    验证码解决器工厂
+
+    根据配置的MCP创建对应的解决器
+    """
+
+    @staticmethod
+    def create(mcp_tools: Optional["Tool"] = None) -> CaptchaSolver:
+        """
+        创建验证码解决器
+
+        Args:
+            mcp_tools: MCP工具集
+
+        Returns:
+            CaptchaSolver实例
+        """
+        if mcp_tools:
+            return MCPCaptchaSolver(mcp_tools=mcp_tools)
+        else:
+            # 返回一个不解决问题的占位符
+            return CaptchaSolver()
 
 
 # 推荐的可选验证码MCP Server
 CAPTCHA_MCP_SERVERS = [
     {
         "name": "everart",
-        "description": "图像识别MCP，支持OCR",
+        "description": "图像识别MCP，支持OCR和图像描述",
         "command": "npx -y @modelcontextprotocol/server-everart",
+        "note": "需要配置API key"
     },
     {
-        "name": "azure-ai-vision",
+        "name": "azure-vision",
         "description": "Azure计算机视觉",
         "command": "npx -y @azure/mcp-servers/cognitive-services/vision",
+        "note": "需要Azure订阅"
     },
 ]
