@@ -9,8 +9,10 @@ from agent.datastack_agent import DataStackAgent, ExecutionPlan, ExecutionStep
 from agent.mixins.offline_expert import OfflineExpertMixin
 from agent.mixins.troubleshooter import TroubleshooterMixin
 from mcp.datastack_mcp import DataStackMCP
+from mcp.auth import DataStackAuth
 from skills.notification import NotificationSkill
 from config.offline_flows import MAIN_FLOW_REGRESSION, ENVIRONMENT_TEMPLATE
+from config.environments import EnvironmentRouter, PREDEFINED_ENVIRONMENTS
 
 
 class ShuzhanAgent(
@@ -25,18 +27,31 @@ class ShuzhanAgent(
     - DataStackAgent: Agent核心能力
     - OfflineExpertMixin: 离线平台专家知识
     - TroubleshooterMixin: 问题排查能力
+    - EnvironmentRouter: 环境智能路由
     """
 
     def __init__(
         self,
         llm,
         environment: Optional[dict] = None,
-        notification_channel: Optional[str] = None
+        notification_channel: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ):
         super().__init__(llm=llm, environment=environment)
 
+        # 初始化环境路由
+        self.env_router = EnvironmentRouter()
+
+        # 认证信息
+        self.username = username or os.getenv("DATASTACK_USERNAME")
+        self.password = password or os.getenv("DATASTACK_PASSWORD")
+
         # 注册MCP
         self._setup_mcp()
+
+        # 设置认证
+        self._setup_auth()
 
         # 设置通知
         self._setup_notification(notification_channel)
@@ -51,6 +66,19 @@ class ShuzhanAgent(
         )
         self.tools.register(datastack_mcp)
 
+    def _setup_auth(self):
+        """设置认证"""
+        env = self.environment or {}
+        if self.username and self.password:
+            base_url = env.get("base_url", "")
+            self.auth = DataStackAuth(
+                base_url=base_url,
+                username=self.username,
+                password=self.password
+            )
+        else:
+            self.auth = None
+
     def _setup_notification(self, channel_name: Optional[str] = None):
         """设置通知渠道"""
         self.notification = NotificationSkill()
@@ -64,6 +92,51 @@ class ShuzhanAgent(
                     channel_type="feishu",  # 或 "dingtalk"
                     webhook_url=webhook
                 )
+
+    def route_environment(self, user_input: str) -> Optional[dict]:
+        """
+        根据用户自然语言智能路由环境
+
+        Args:
+            user_input: 用户输入，如"帮我看62环境的任务"
+
+        Returns:
+            匹配的环境配置
+        """
+        matched_env = self.env_router.route(user_input)
+        if matched_env:
+            return {
+                "name": matched_env.name,
+                "version": matched_env.version,
+                "base_url": matched_env.base_url,
+                "description": matched_env.description,
+                "matched_score": "高"  # 实际可返回具体分数
+            }
+        return None
+
+    def list_environments(self) -> list:
+        """列出所有可用环境"""
+        return [
+            {
+                "name": e.name,
+                "version": e.version,
+                "base_url": e.base_url,
+                "tags": e.tags
+            }
+            for e in self.env_router.get_all_environments()
+        ]
+
+    def add_custom_environment(self, env_config: dict) -> None:
+        """添加自定义环境"""
+        from config.environments import DataStackEnvironment
+        env = DataStackEnvironment(
+            name=env_config["name"],
+            version=env_config["version"],
+            base_url=env_config["base_url"],
+            description=env_config.get("description", ""),
+            tags=env_config.get("tags", [])
+        )
+        self.env_router.add_environment(env)
 
     async def execute_main_flow(
         self,
@@ -152,13 +225,23 @@ async def main():
     # 创建Agent
     agent = ShuzhanAgent(
         llm=SimpleLLMClient(),
-        environment={
-            "version": "6.2",
-            "name": "离线平台62",
-            "base_url": os.getenv("DATASTACK_BASE_URL", "http://localhost:8080"),
-            "api_token": os.getenv("DATASTACK_API_TOKEN")
-        }
+        username=os.getenv("DATASTACK_USERNAME", "admin@dtstack.com"),
+        password=os.getenv("DATASTACK_PASSWORD", "DrpEco_2020")
     )
+
+    # 演示环境路由功能
+    print("=== 环境路由演示 ===")
+    print(f"可用环境: {agent.list_environments()}")
+
+    # 测试路由
+    test_inputs = [
+        "帮我看62测试环境",
+        "在63预发环境造数",
+        "离线62版本的任务"
+    ]
+    for inp in test_inputs:
+        matched = agent.route_environment(inp)
+        print(f"输入: '{inp}' => 路由结果: {matched}")
 
     # 执行主流程
     result = await agent.execute_main_flow(env_name="offline_62")
