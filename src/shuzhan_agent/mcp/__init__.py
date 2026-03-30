@@ -1,14 +1,13 @@
 """
 MCP模块
 
-提供MCP客户端封装，调用外部MCP Server的能力
+所有MCP能力直接集成到代码中，不依赖外部编辑器
 """
 
 from .base import MCPServer, MCPClient
 from .datastack_mcp import DataStackMCP, OFFLINE_MODULES, MODULE_DEPENDENCIES
 from .auth import DataStackAuthenticator, DataStackAuth, AuthManager, AuthResult, CaptchaHandler
-from .captcha_solver import CaptchaSolver, MCPCaptchaSolver, CaptchaSolverFactory, CAPTCHA_MCP_SERVERS
-from .playwright_mcp import PlaywrightMCPTool
+from .playwright_integration import BrowserAutomation, VisionCaptchaSolver
 
 __all__ = [
     # 核心
@@ -20,15 +19,11 @@ __all__ = [
     "MODULE_DEPENDENCIES",
     # 认证
     "DataStackAuthenticator",
-    "DataStackAuth",  # 向后兼容别名
+    "DataStackAuth",
     "AuthManager",
     "AuthResult",
     "CaptchaHandler",
-    # 验证码
-    "CaptchaSolver",
-    "MCPCaptchaSolver",
-    "CaptchaSolverFactory",
-    "CAPTCHA_MCP_SERVERS",
-    # Playwright
-    "PlaywrightMCPTool",
+    # Playwright集成（不依赖外部MCP）
+    "BrowserAutomation",
+    "VisionCaptchaSolver",
 ]
