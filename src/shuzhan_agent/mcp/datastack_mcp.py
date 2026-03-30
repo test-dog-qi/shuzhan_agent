@@ -92,47 +92,69 @@ class DataStackMCP(MCPServer):
             }
 
     def _build_api_path(self, module: str, action: str) -> str:
-        """构建API路径"""
-        # 这里需要根据数栈的实际API来定义
+        """构建API路径 - 基于dtstack-httprunner真实API"""
         api_paths = {
-            # 项目管理
-            ("project", "create"): "/api/projects",
-            ("project", "update"): "/api/projects/{id}",
-            ("project", "delete"): "/api/projects/{id}",
-            ("project", "query"): "/api/projects",
-            ("project", "get"): "/api/projects/{id}",
+            # 项目管理 - /api/rdos/common/project/
+            ("project", "create"): "/api/rdos/common/project/createProject",
+            ("project", "delete"): "/api/rdos/common/project/deleteProject",
+            ("project", "get_projects"): "/api/rdos/common/project/getProjects",
+            ("project", "get_by_id"): "/api/rdos/common/project/getProjectByProjectId",
+            ("project", "get_info"): "/api/rdos/common/project/getProjectInfo",
+            ("project", "update_info"): "/api/rdos/common/project/updateProjectInfo",
+            ("project", "pre_delete"): "/api/rdos/common/project/preDeleteProject",
+            ("project", "get_support_engine_type"): "/api/rdos/common/project/getSupportEngineType",
+            ("project", "get_project_engine_info"): "/api/rdos/common/project/getProjectEngineInfo",
+            ("project", "get_project_users"): "/api/rdos/common/project/getProjectUsers",
 
-            # 数据源
-            ("datasource", "create"): "/api/datasources",
-            ("datasource", "update"): "/api/datasources/{id}",
-            ("datasource", "delete"): "/api/datasources/{id}",
-            ("datasource", "query"): "/api/datasources",
-            ("datasource", "test"): "/api/datasources/test",
+            # 数据源 - /api/rdos/batch/batchDataSource/
+            ("datasource", "list"): "/api/rdos/batch/batchDataSource/list",
+            ("datasource", "get_types"): "/api/rdos/batch/batchDataSource/getTypes",
+            ("datasource", "get_by_id"): "/api/rdos/batch/batchDataSource/getBySourceId",
+            ("datasource", "preview"): "/api/rdos/batch/batchDataSource/preview",
+            ("datasource", "get_tables_by_ds"): "/api/rdos/batch/batchDataSource/getTableInfoByDataSource",
 
-            # 数据开发
-            ("data_development", "create_task"): "/api/tasks",
-            ("data_development", "update_task"): "/api/tasks/{id}",
-            ("data_development", "delete_task"): "/api/tasks/{id}",
-            ("data_development", "query_tasks"): "/api/tasks",
-            ("data_development", "get_task"): "/api/tasks/{id}",
-            ("data_development", "run_task"): "/api/tasks/{id}/run",
+            # 数据开发-任务 - /api/rdos/batch/batchTask/
+            ("data_development", "get_task_by_id"): "/api/rdos/batch/batchTask/getTaskById",
+            ("data_development", "add_or_update_task"): "/api/rdos/batch/batchTask/addOrUpdateTask",
+            ("data_development", "delete_task"): "/api/rdos/batch/batchTask/deleteTask",
+            ("data_development", "query_tasks"): "/api/rdos/batch/batchTask/queryTasks",
+            ("data_development", "get_tasks_by_project"): "/api/rdos/batch/batchTask/getTasksByProjectId",
+            ("data_development", "publish_task"): "/api/rdos/batch/batchTask/publishTask",
+            ("data_development", "run_task"): "/api/rdos/batch/batchTask/startSqlImmediately",
+            ("data_development", "frozen_task"): "/api/rdos/batch/batchTask/frozenTask",
+            ("data_development", "rename_task"): "/api/rdos/batch/batchTask/renameTask",
+            ("data_development", "clone_task"): "/api/rdos/batch/batchTask/cloneTask",
 
-            # 运维中心
-            ("ops_center", "query_jobs"): "/api/jobs",
-            ("ops_center", "get_job"): "/api/jobs/{id}",
-            ("ops_center", "run_job"): "/api/jobs/{id}/run",
-            ("ops_center", "stop_job"): "/api/jobs/{id}/stop",
-            ("ops_center", "re_run"): "/api/jobs/{id}/re-run",
-            ("ops_center", "fill_data"): "/api/jobs/{id}/fill-data",
+            # 运维中心-作业 - /api/rdos/batch/batchJob/
+            ("ops_center", "get_job_by_id"): "/api/rdos/batch/batchJob/getJobById",
+            ("ops_center", "get_job_status"): "/api/rdos/batch/batchJob/getJobStatus",
+            ("ops_center", "get_status_count"): "/api/rdos/batch/batchJob/getStatusCount",
+            ("ops_center", "query_jobs"): "/api/rdos/batch/batchJob/queryJobs",
+            ("ops_center", "run_job"): "/api/rdos/batch/batchJob/startSqlImmediately",
+            ("ops_center", "stop_job"): "/api/rdos/batch/batchJob/stopJob",
+            ("ops_center", "re_run"): "/api/rdos/batch/batchJob/restartJobAndResume",
+            ("ops_center", "fill_data"): "/api/rdos/batch/batchJob/fillTaskData",
+            ("ops_center", "create_fill_data"): "/api/rdos/batch/fillData/createFillData",
+            ("ops_center", "get_related_jobs"): "/api/rdos/batch/batchJob/getRelatedJobs",
+            ("ops_center", "get_fill_data_detail"): "/api/rdos/batch/batchJob/getFillDataDetailInfo",
 
-            # 数据地图
-            ("data_map", "query_tables"): "/api/tables",
-            ("data_map", "get_table"): "/api/tables/{id}",
-            ("data_map", "query_lineage"): "/api/tables/{id}/lineage",
-            ("data_map", "apply_permission"): "/api/tables/{id}/permission",
+            # 数据地图 - /api/rdos/batch/batchTableInfo/
+            ("data_map", "page_query"): "/api/rdos/batch/batchTableInfo/pageQuery",
+            ("data_map", "get_table"): "/api/rdos/batch/batchTableInfo/getTable",
+            ("data_map", "get_table_by_name"): "/api/rdos/batch/batchTableInfo/getTableByName",
+            ("data_map", "get_table_columns"): "/api/rdos/batch/batchTableInfo/getTableColumnsByName",
+            ("data_map", "get_table_list"): "/api/rdos/batch/batchTableInfo/getTableList",
+            ("data_map", "get_blood_tree"): "/api/rdos/batch/batchTableBlood/getTree",
+            ("data_map", "get_blood_columns"): "/api/rdos/batch/batchTableBlood/getColumns",
+
+            # 脚本 - /api/rdos/batch/batchScript/
+            ("script", "get_types"): "/api/rdos/batch/batchScript/getTypes",
+            ("script", "add_or_update"): "/api/rdos/batch/batchScript/addOrUpdateScript",
+            ("script", "delete"): "/api/rdos/batch/batchScript/deleteScript",
+            ("script", "get_by_id"): "/api/rdos/batch/batchScript/getScriptById",
         }
 
-        return api_paths.get((module, action), f"/api/{module}/{action}")
+        return api_paths.get((module, action), f"/api/rdos/batch/{module}/{action}")
 
     def _get_http_method(self, action: str) -> str:
         """根据操作名确定HTTP方法"""
@@ -146,32 +168,51 @@ class DataStackMCP(MCPServer):
             return "GET"
 
     def get_tools(self) -> List[Dict[str, Any]]:
-        """获取支持的工具列表"""
+        """获取支持的工具列表 - 基于真实API"""
         return [
             # 项目管理
-            {"name": "create_project", "description": "创建项目", "params": {"name": "str", "desc": "str"}},
-            {"name": "update_project", "description": "更新项目", "params": {"id": "str", "name": "str", "desc": "str"}},
-            {"name": "delete_project", "description": "删除项目", "params": {"id": "str"}},
-            {"name": "query_projects", "description": "查询项目列表", "params": {}},
-            {"name": "get_project", "description": "获取项目详情", "params": {"id": "str"}},
+            {"name": "create_project", "description": "创建项目", "params": {"projectName": "str", "projectAlias": "str", "projectOwnerId": "str"}},
+            {"name": "delete_project", "description": "删除项目", "params": {"projectAlias": "str", "projectId": "str"}},
+            {"name": "get_projects", "description": "获取租户下所有项目", "params": {}},
+            {"name": "get_project_by_id", "description": "根据ID获取项目详情", "params": {"projectId": "str"}},
+            {"name": "update_project_info", "description": "更新项目信息", "params": {"projectAlias": "str", "projectDesc": "str", "projectId": "str"}},
+            {"name": "get_project_users", "description": "获取项目下用户列表", "params": {"projectId": "str"}},
 
             # 数据源
-            {"name": "create_datasource", "description": "创建数据源", "params": {"type": "str", "name": "str", "config": "dict"}},
-            {"name": "test_datasource", "description": "测试数据源连接", "params": {"id": "str"}},
-            {"name": "query_datasources", "description": "查询数据源列表", "params": {}},
+            {"name": "list_datasources", "description": "获取数据源列表", "params": {"currentPage": "int", "pageSize": "int", "search": "str"}},
+            {"name": "get_datasource_types", "description": "获取支持的数据源类型", "params": {}},
+            {"name": "preview_datasource", "description": "预览数据源数据", "params": {"sourceId": "str"}},
 
             # 数据开发
-            {"name": "create_task", "description": "创建数据开发任务", "params": {"project_id": "str", "type": "str", "name": "str", "script": "str"}},
-            {"name": "run_task", "description": "运行任务", "params": {"id": "str"}},
+            {"name": "get_task_by_id", "description": "根据ID获取任务", "params": {"taskId": "str"}},
+            {"name": "add_or_update_task", "description": "创建或更新任务", "params": {"task": "dict"}},
+            {"name": "delete_task", "description": "删除任务", "params": {"taskId": "str"}},
+            {"name": "query_tasks", "description": "查询任务列表", "params": {}},
+            {"name": "get_tasks_by_project", "description": "获取项目下所有任务", "params": {"projectId": "str"}},
+            {"name": "publish_task", "description": "发布任务", "params": {"taskId": "str"}},
+            {"name": "run_task", "description": "立即运行任务(SQL)", "params": {"taskId": "str"}},
+            {"name": "frozen_task", "description": "冻结任务", "params": {"taskId": "str"}},
 
             # 运维中心
-            {"name": "run_job", "description": "运行作业", "params": {"id": "str"}},
+            {"name": "get_job_by_id", "description": "获取作业详情", "params": {"id": "str"}},
+            {"name": "get_job_status", "description": "获取作业状态", "params": {"id": "str"}},
+            {"name": "query_jobs", "description": "查询作业列表", "params": {}},
+            {"name": "run_job", "description": "立即运行作业", "params": {"id": "str"}},
+            {"name": "stop_job", "description": "停止作业", "params": {"id": "str"}},
             {"name": "re_run_job", "description": "重跑作业", "params": {"id": "str"}},
-            {"name": "fill_data_job", "description": "补数作业", "params": {"id": "str", "start_date": "str", "end_date": "str"}},
+            {"name": "fill_data", "description": "补数据", "params": {"taskId": "str", "startDate": "str", "endDate": "str"}},
+            {"name": "get_related_jobs", "description": "获取相关作业", "params": {"id": "str"}},
 
             # 数据地图
-            {"name": "query_tables", "description": "查询表列表", "params": {}},
-            {"name": "query_lineage", "description": "查询表血缘", "params": {"table_id": "str"}},
+            {"name": "page_query_tables", "description": "分页查询表", "params": {"currentPage": "int", "pageSize": "int"}},
+            {"name": "get_table", "description": "获取表详情", "params": {"tableId": "str"}},
+            {"name": "get_table_by_name", "description": "根据名称获取表", "params": {"projectId": "str", "tableName": "str"}},
+            {"name": "get_blood_tree", "description": "获取血缘关系树", "params": {"tableId": "str"}},
+
+            # 脚本
+            {"name": "get_script_types", "description": "获取脚本类型", "params": {}},
+            {"name": "add_or_update_script", "description": "创建或更新脚本", "params": {"script": "dict"}},
+            {"name": "get_script_by_id", "description": "获取脚本详情", "params": {"id": "str"}},
         ]
 
 
