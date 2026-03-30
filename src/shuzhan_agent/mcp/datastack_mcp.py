@@ -94,6 +94,10 @@ class DataStackMCP(MCPServer):
     def _build_api_path(self, module: str, action: str) -> str:
         """构建API路径 - 基于dtstack-httprunner真实API"""
         api_paths = {
+            # 认证 - /api/rdos/common/user/
+            ("auth", "login"): "/api/rdos/common/user/login",
+            ("auth", "captcha"): "/api/rdos/common/captcha/image",
+
             # 项目管理 - /api/rdos/common/project/
             ("project", "create"): "/api/rdos/common/project/createProject",
             ("project", "delete"): "/api/rdos/common/project/deleteProject",

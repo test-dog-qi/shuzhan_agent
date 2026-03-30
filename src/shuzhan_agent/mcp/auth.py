@@ -4,7 +4,7 @@
 保留认证业务逻辑，HTTP请求由MCP处理
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 
@@ -169,5 +169,5 @@ class AuthManager:
         return list(self._authenticators.keys())
 
 
-# 类型提示需要
-from typing import List, Dict
+# 向后兼容别名
+DataStackAuth = DataStackAuthenticator
