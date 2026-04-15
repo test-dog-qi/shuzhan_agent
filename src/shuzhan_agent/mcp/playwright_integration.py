@@ -31,17 +31,26 @@ class BrowserAutomation:
 
     def __init__(self, headless: bool = True):
         self.headless = headless
+        self._playwright = None  # 保持playwright引用防止被GC
         self._browser = None
         self._context = None
         self._page = None
         self._cookies: Dict[str, str] = {}
 
     async def initialize(self):
-        """初始化浏览器"""
+        """初始化浏览器 - 使用系统Chrome"""
         from playwright.async_api import async_playwright
 
-        playwright = await async_playwright().start()
-        self._browser = await playwright.chromium.launch(headless=self.headless)
+        self._playwright = await async_playwright().start()
+        # 优先使用系统Chrome，避免下载问题
+        try:
+            self._browser = await self._playwright.chromium.launch(
+                headless=self.headless,
+                channel="chrome"  # 使用系统Chrome
+            )
+        except Exception:
+            # 如果系统Chrome不可用，使用默认chromium
+            self._browser = await self._playwright.chromium.launch(headless=self.headless)
         self._context = await self._browser.new_context()
         self._page = await self._context.new_page()
 

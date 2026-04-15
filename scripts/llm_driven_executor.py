@@ -63,7 +63,7 @@ class ShuzhanLLMAgent:
             登录结果
         """
         url = url or os.getenv("DATASTACK_BASE_URL")
-        login_url = url.rstrip("/") + "/login" if url else None
+        login_url = url.rstrip("/") if url else None
         username = username or os.getenv("DATASTACK_USERNAME")
         password = password or os.getenv("DATASTACK_PASSWORD")
 
